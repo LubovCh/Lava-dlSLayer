@@ -33,7 +33,8 @@ __global__ void LIDynamicsFwdKernel(
     const int neurons_per_batch,
     const int num_decays, // this determines individual, channelwise or shared decay
     const int decay_block, // if decay_block==1 then its individual neuron
-    const int num_steps
+    const int num_steps,
+    const float dt
 ) {
     unsigned neuron_id = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -54,6 +55,10 @@ __global__ void LIDynamicsFwdKernel(
     // if(neuron_id == 0)  printf("int: %d bytes\n", sizeof(int));
 
     for(int n=0; n<num_steps; ++n) {
+
+        if (n % static_cast<int>(dt) != 0)
+            continue;  // Skip this step if it's not a time step
+
         linear_id = n + neuron_id * num_steps;
 
         output_sign = (output_old >= 0) ? 1 : -1;
@@ -83,7 +88,8 @@ __global__ void LIDynamicsBwdKernel(
     const int neurons_per_batch,
     const int num_decays, // this determines individual, channelwise or shared decay
     const int decay_block, // if decay_block==1 then its individual neuron
-    const int num_steps
+    const int num_steps,
+    const float dt
 ) {
     unsigned neuron_id = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -103,6 +109,8 @@ __global__ void LIDynamicsBwdKernel(
     int linear_id;
 
     for(int n=num_steps-1; n>=0; --n) {
+        if (n % static_cast<int>(dt) != 0)
+            continue;  // Skip this step if it's not a time step
         linear_id = n + neuron_id * num_steps;
         grad_input = decay * grad_input + grad_output[linear_id];
         grad_input_tensor[linear_id] = grad_input;
@@ -113,6 +121,7 @@ variable_list LIDynamicsFwd(
     const Variable input,
     const Variable decay,
     const Variable state,
+    float dt,
     float threshold,
     int w_scale
 ) {
@@ -145,7 +154,8 @@ variable_list LIDynamicsFwd(
         threshold, w_scale, num_neurons, num_neurons / input.size(0),
         decay.numel(), // num_decays 
         num_neurons / decay.numel() / input.size(0), // decay_block 
-        input.size(-1) // num_steps
+        input.size(-1), // num_steps
+        dt
     );
     // cudaDeviceSynchronize();
 
@@ -155,7 +165,8 @@ variable_list LIDynamicsFwd(
 variable_list LIDynamicsBwd(
     const Variable grad_output,
     const Variable output,
-    const Variable decay
+    const Variable decay,
+    const float dt
 ) {
     // make sure all the inputs are contigious
     CHECK_INPUT(grad_output);
@@ -179,7 +190,8 @@ variable_list LIDynamicsBwd(
         num_neurons, num_neurons / grad_output.size(0),
         decay.numel(), // num_decays 
         num_neurons / decay.numel() / grad_output.size(0), // decay_block 
-        grad_output.size(-1) // num_steps
+        grad_output.size(-1), // num_steps
+        dt
     );
     // cudaDeviceSynchronize();
     
@@ -207,11 +219,13 @@ class LIDynamics : public torch::autograd::Function<LIDynamics> {
         const Variable input,
         const Variable decay,
         const Variable state,
+        float dt,
         float threshold,
         int w_scale
     ) {
-        auto result = LIDynamicsFwd(input, decay, state, threshold, w_scale);
+        auto result = LIDynamicsFwd(input, decay, state, dt, threshold, w_scale);
         ctx->save_for_backward({result[0], decay});
+        ctx->saved_data["dt"] = dt;
         return result;
     }
 
@@ -221,12 +235,16 @@ class LIDynamics : public torch::autograd::Function<LIDynamics> {
         auto output = saved[0];
         auto decay  = saved[1];
 
-        auto grads = LIDynamicsBwd(grad_output[0], output, decay);
+        float dt = ctx->saved_data["dt"].toDouble(); // Retrieve dt from the context
+
+
+        auto grads = LIDynamicsBwd(grad_output[0], output, decay, dt);
 
         return {
             grads[0], // grad_input, 
             grads[1], // grad_decay,
             torch::Tensor(), // Gradients of non-tensor arguments to forward must be `torch::Tensor()`.
+            torch::Tensor(), 
             torch::Tensor(), 
             torch::Tensor() 
         };
@@ -237,10 +255,12 @@ torch::Tensor LIDynamicsFx(
     const torch::Tensor& input,
     const torch::Tensor& decay,
     const torch::Tensor& state,
+    const float dt,
     float threshold,
     int w_scale
+    
 ) {
-    auto result = LIDynamics::apply(input, decay, state, threshold, w_scale);
+    auto result = LIDynamics::apply(input, decay, state, dt, threshold, w_scale);
     return result[0];
 }
 

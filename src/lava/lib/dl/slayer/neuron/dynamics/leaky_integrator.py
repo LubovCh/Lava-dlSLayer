@@ -47,7 +47,7 @@ class Accelerated:
         return Accelerated.module
 
 
-def dynamics(input, decay, state, w_scale, threshold=None, debug=False):
+def dynamics(input, decay, state, dt, w_scale, threshold=None, debug=False):
     """Leaky integrator dynamics. It automatically switches
     between CUDA and CPU implementation depending on available hardware.
 
@@ -90,10 +90,14 @@ def dynamics(input, decay, state, w_scale, threshold=None, debug=False):
         state = state * torch.ones(input.shape[:-1]).to(input.device)
 
     if input.is_cuda is False or debug is True:
-        output = _LIDynamics.apply(input, decay, state, threshold, w_scale)
+        output = _LIDynamics.apply(input, decay, state, dt, threshold, w_scale)
     else:
-        output = Accelerated.leaky_integrator.dynamics(
-            input.contiguous(), decay.contiguous(), state.contiguous(),
+        print("wei: " + str(w_scale))
+        print("dt: " + str(dt))
+        print("thr: " + str(threshold))
+        module = Accelerated.leaky_integrator
+        output = module.dynamics(
+            input.contiguous(), decay.contiguous(), state.contiguous(), dt,
             threshold, w_scale
         )
 
@@ -124,16 +128,16 @@ class _LIDynamics(torch.autograd.Function):
     DEBUG = False
 
     @staticmethod
-    def forward(ctx, input, decay, state, threshold, w_scale):
+    def forward(ctx, input, decay, state, dt, threshold, w_scale):
         """ """
         output = _li_dynamics_fwd(
-            input, decay, state, threshold,
+            input, decay, state, dt, threshold,
             w_scale, dtype=torch.int64
         )
 
         if _LIDynamics.DEBUG is True and input.is_cuda is True:
             _output, *_ = Accelerated.leaky_integrator.fwd(
-                input, decay, state, threshold, w_scale
+                input, decay, state, dt, threshold, w_scale
             )
             # print('Fwd Checking')
             for i in range(output.shape[1]):
@@ -208,7 +212,7 @@ class _LIDynamics(torch.autograd.Function):
 
 
 def _li_dynamics_fwd(
-    input, decay, state, threshold, w_scale, dtype=torch.int32
+    input, decay, state, dt, threshold, w_scale, dtype=torch.int32
 ):
     """ """
     output_old = (state * w_scale).clone().detach().to(dtype).to(input.device)
@@ -218,6 +222,8 @@ def _li_dynamics_fwd(
     threshold *= w_scale
 
     for n in range(input.shape[-1]):
+        if n % dt != 0:
+            continue
         output_new = right_shift_to_zero(output_old * decay_int, 12) + \
             (w_scale * input[..., n]).to(dtype)
         if threshold > 0:

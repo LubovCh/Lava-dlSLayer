@@ -9,6 +9,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import Dataset, DataLoader
+import urllib.request
+import shutil
+
 
 import lava.lib.dl.slayer as slayer
 
@@ -46,7 +49,8 @@ class NMNISTDataset(Dataset):
         enable/disable automatic download, by default True
     """
     def __init__(
-        self, path='data',
+        self, 
+        path= os.path.join('data', '468j46mzdv-1'),
         train=True,
         sampling_time=1, sample_length=300,
         transform=None, download=True,
@@ -54,39 +58,41 @@ class NMNISTDataset(Dataset):
         super(NMNISTDataset, self).__init__()
         self.path = path
         if train:
-            data_path = path + '/Train'
-            source = 'https://www.dropbox.com/sh/tg2ljlbmtzygrag/'\
-                'AABlMOuR15ugeOxMCX0Pvoxga/Train.zip'
+            data_path = os.path.join(path, "Train")
+            source = 'https://www.dropbox.com/sh/tg2ljlbmtzygrag/AABlMOuR15ugeOxMCX0Pvoxga/Train.zip'
         else:
-            data_path = path + '/Test'
-            source = 'https://www.dropbox.com/sh/tg2ljlbmtzygrag/'\
-                'AADSKgJ2CjaBWh75HnTNZyhca/Test.zip'
+            data_path = os.path.join(path, "Test")
+            source = 'https://www.dropbox.com/sh/tg2ljlbmtzygrag/AADSKgJ2CjaBWh75HnTNZyhca/Test.zip'
 
         if download is True:
             attribution_text = '''
-NMNIST dataset is freely available here:
-https://www.garrickorchard.com/datasets/n-mnist
+                NMNIST dataset is freely available here:
+                https://www.garrickorchard.com/datasets/n-mnist
 
-(c) Creative Commons:
-    Orchard, G.; Cohen, G.; Jayawant, A.; and Thakor, N.
-    "Converting Static Image Datasets to Spiking Neuromorphic Datasets Using
-    Saccades",
-    Frontiers in Neuroscience, vol.9, no.437, Oct. 2015
+                (c) Creative Commons:
+                    Orchard, G.; Cohen, G.; Jayawant, A.; and Thakor, N.
+                    "Converting Static Image Datasets to Spiking Neuromorphic Datasets Using
+                    Saccades",
+                    Frontiers in Neuroscience, vol.9, no.437, Oct. 2015
             '''.replace(' '*12, '')
             if train is True:
                 print(attribution_text)
 
-            if len(glob.glob(f'{data_path}/')) == 0:  # dataset does not exist
+            if not os.path.isdir(data_path):  # dataset does not exist
+                os.mkdir(data_path) 
                 print(
                     f'NMNIST {"training" if train is True else "testing"} '
                     'dataset is not available locally.'
                 )
                 print('Attempting download (This will take a while) ...')
-                os.system(f'wget {source} -P {self.path}/ -q --show-progress')
+                os.makedirs(self.path, exist_ok=True)
+                with urllib.request.urlopen(source) as dl_file:
+                    with open(f'{self.path}/nmnist.zip', 'wb') as out_file:
+                        out_file.write(dl_file.read())
                 print('Extracting files ...')
-                with zipfile.ZipFile(data_path + '.zip') as zip_file:
-                    for member in zip_file.namelist():
-                        zip_file.extract(member, self.path)
+                with zipfile.ZipFile(f'{self.path}', 'r') as zip_ref:
+                    zip_ref.extractall(self.path)
+                os.remove(f'{self.path}/nmnist.zip')
                 print('Download complete.')
         else:
             assert len(glob.glob(f'{data_path}/')) == 0, \
@@ -102,7 +108,7 @@ https://www.garrickorchard.com/datasets/n-mnist
 
     def __getitem__(self, i):
         filename = self.samples[i]
-        label = int(filename.split('/')[-2])
+        label = int(filename.split('\\')[-2])
         event = slayer.io.read_2d_spikes(filename)
         if self.transform is not None:
             event = self.transform(event)
@@ -149,10 +155,12 @@ class Network(torch.nn.Module):
                 ),
             ])
 
-    def forward(self, spike):
+    def forward(self, spike, dt=1.0):
+
         count = []
         for block in self.blocks:
-            spike = block(spike)
+            print(dt)
+            spike = block(spike, dt)
             count.append(torch.mean(spike).item())
         return spike, torch.FloatTensor(count).reshape(
             (1, -1)
@@ -183,43 +191,57 @@ if __name__ == '__main__':
     trained_folder = 'Trained'
     os.makedirs(trained_folder, exist_ok=True)
 
+    # Sets the device to use for computations to GPU (cuda). This will accelerate training if a compatible GPU is available.
+
     # device = torch.device('cpu')
     device = torch.device('cuda')
 
+    # Instantiates the SNN (defined in a Network class elsewhere) and moves it to the selected device.
     net = Network().to(device)
 
+    #Uses the Adam optimizer with a learning rate of 0.001 for training the network.
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 
+    #Loads the N-MNIST dataset, applying any necessary augmentations to the training set.
     training_set = NMNISTDataset(train=True, transform=augment)
     testing_set = NMNISTDataset(train=False)
 
+    # Wraps the datasets in DataLoader objects to enable batch processing and shuffling.
     train_loader = DataLoader(
             dataset=training_set, batch_size=32, shuffle=True
         )
     test_loader = DataLoader(dataset=testing_set, batch_size=32, shuffle=True)
 
+    # Defines the loss function using SpikeRate from SLAYER
     error = slayer.loss.SpikeRate(
             true_rate=0.2, false_rate=0.03, reduction='sum'
         ).to(device)
     # error = slayer.loss.SpikeMax(mode='logsoftmax').to(device)
 
+    # keep track of training statistics.
     stats = slayer.utils.LearningStats()
+
+    # Creates an Assistant which handles training, testing, and logging.
     assistant = slayer.utils.Assistant(
             net, error, optimizer, stats,
             classifier=slayer.classifier.Rate.predict, count_log=True
         )
 
     epochs = 200
+    dt = 2.0
 
     for epoch in range(epochs):
+        # For each batch in the training data, the Assistant trains the network, computes the output, and logs the event rates (spike counts).
         for i, (input, label) in enumerate(train_loader):  # training loop
-            output, count = assistant.train(input, label)
+            print(str(i) + " it " + str(dt))
+            output, count = assistant.train(input, label, dt)
             header = [
                     'Event rate : ' +
                     ', '.join([f'{c.item():.4f}' for c in count.flatten()])
                 ]
             stats.print(epoch, iter=i, header=header, dataloader=train_loader)
 
+        # Similar to the training loop but used for testing the network on the test dataset.
         for i, (input, label) in enumerate(test_loader):  # training loop
             output, count = assistant.test(input, label)
             header = [
@@ -228,6 +250,9 @@ if __name__ == '__main__':
                 ]
             stats.print(epoch, iter=i, header=header, dataloader=test_loader)
 
+        # Saves the model if the current testing accuracy is the best seen so far.
+        # Updates, saves, and plots training statistics.
+        # Logs the gradient flow, useful for diagnosing issues with training.
         if stats.testing.best_accuracy:
             torch.save(net.state_dict(), trained_folder + '/network.pt')
         stats.update()

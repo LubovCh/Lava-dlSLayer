@@ -81,7 +81,7 @@ class Assistant:
             print('\nLearning rate reduction from', param_group['lr'])
             param_group['lr'] /= factor
 
-    def train(self, input, target):
+    def train(self, input, target, dt=1.0):
         """Training assistant.
 
         Parameters
@@ -101,19 +101,24 @@ class Assistant:
         """
         self.net.train()
 
+        # This ensures the tensors are moved to the correct device.
         if self.device is None:
             for p in self.net.parameters():
                 self.device = p.device
                 break
         device = self.device
 
+        # moves the input and target tensors to the same device as the network parameters.
         input = input.to(device)
         target = target.to(device)
 
+        # Forward Pass: Feeds the input through the network to obtain the output
         count = None
         if self.count_log is True:
+            # the network also returns the spike count.
             if self.lam is None:
-                output, count = self.net(input)
+                # the network returns an additional net_loss term for regularization.
+                output, count = self.net(input, dt)
             else:
                 output, net_loss, count = self.net(input)
         else:
@@ -122,9 +127,11 @@ class Assistant:
             else:
                 output, net_loss = self.net(input)
 
+        # Computes the loss using the specified loss function
         loss = self.error(output, target)
 
         if self.stats is not None:
+            #  updates the training statistics with the number of samples, total loss, and number of correctly classified samples.
             self.stats.training.num_samples += input.shape[0]
             self.stats.training.loss_sum += loss.cpu().data.item() \
                 * output.shape[0]

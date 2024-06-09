@@ -271,7 +271,7 @@ class Neuron(base.Neuron):
             'gradedSpike': self.graded_spike,
         }
 
-    def dynamics(self, input):
+    def dynamics(self, input, dt=1.0):
         """Computes the dynamics (without spiking behavior) of the neuron
         instance to an input. The input shape must match with the neuron shape.
         For the first time, the neuron shape is determined from the input
@@ -353,10 +353,13 @@ class Neuron(base.Neuron):
         if self.requires_grad is True:
             self.clamp()
 
+            # THIS IS I. HERE  UPDATE I
+        print(dt)
         current = leaky_integrator.dynamics(
             input,
             quantize(self.current_decay),
             self.current_state.contiguous(),
+            dt,
             self.s_scale,
             debug=self.debug
         )
@@ -368,6 +371,7 @@ class Neuron(base.Neuron):
             current,  # bias can be enabled by adding it here
             quantize(self.voltage_decay),
             self.voltage_state.contiguous(),
+            dt,
             self.s_scale,
             self.threshold + self.threshold_eps,
             debug=self.debug
@@ -420,7 +424,7 @@ class Neuron(base.Neuron):
 
         return spike
 
-    def forward(self, input):
+    def forward(self, input, dt=1.0):
         """Computes the full response of the neuron instance to an input.
         The input shape must match with the neuron shape. For the first time,
         the neuron shape is determined from the input automatically.
@@ -436,5 +440,6 @@ class Neuron(base.Neuron):
             spike response of the neuron.
 
         """
-        _, voltage = self.dynamics(input)
+        print(dt)
+        _, voltage = self.dynamics(input, dt)
         return self.spike(voltage)

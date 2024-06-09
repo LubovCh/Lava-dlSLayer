@@ -532,7 +532,7 @@ class AbstractDense(torch.nn.Module):
         self.delay = None
         self.delay_shift = delay_shift
 
-    def forward(self, x):
+    def forward(self, x, dt=1.0):
         """Forward computation method. The input can be either of ``NCT`` or
         ``NCHWT`` format.
         """
@@ -544,7 +544,8 @@ class AbstractDense(torch.nn.Module):
                 self.synapse.weight.data *= self.mask
 
         z = self.synapse(x)
-        x = self.neuron(z)
+        print(dt)
+        x = self.neuron(z, dt)
         if self.delay_shift is True:
             x = step_delay(self, x)
         if self.delay is not None:
