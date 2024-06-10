@@ -66,7 +66,7 @@ class Spike(torch.autograd.Function):
         voltage, threshold,
         tau_rho, scale_rho,
         graded_spike,
-        voltage_last, scale
+        voltage_last, scale, dt
     ):
         """
         """
@@ -75,37 +75,39 @@ class Spike(torch.autograd.Function):
 
         # spike function is formally defined as
         # f_s(v) = \mathcal{H}(v - \vartheta)
-
-        if graded_spike is True:
-            if voltage.is_cuda is True:
-                voltage_old = delay(voltage)
+        last_time_step = voltage.shape[-1] - 1
+        spikes = torch.zeros_like(voltage)
+        if last_time_step % dt == 0:
+            if graded_spike is True:
+                if voltage.is_cuda is True:
+                    voltage_old = delay(voltage)
+                else:
+                    voltage_old = torch.zeros_like(voltage)
+                    voltage_old[..., 1:] = voltage[..., :-1]
+                voltage_old[..., 0] = voltage_last
+                spikes = ((voltage >= threshold) * voltage / scale).to(dtype)
             else:
-                voltage_old = torch.zeros_like(voltage)
-                voltage_old[..., 1:] = voltage[..., :-1]
-            voltage_old[..., 0] = voltage_last
-            spikes = ((voltage >= threshold) * voltage / scale).to(dtype)
-        else:
-            spikes = (voltage >= threshold).to(dtype)
+                spikes = (voltage >= threshold).to(dtype)
 
-        graded_spike = 1 if graded_spike is True else 0
-        if torch.is_tensor(threshold) is False:
-            threshold = torch.tensor(threshold, device=device, dtype=dtype)
-        ctx.save_for_backward(
-            voltage,
-            torch.autograd.Variable(threshold, requires_grad=False),
-            torch.autograd.Variable(
-                torch.tensor(tau_rho, device=device, dtype=dtype),
-                requires_grad=False
-            ),
-            torch.autograd.Variable(
-                torch.tensor(scale_rho, device=device, dtype=dtype),
-                requires_grad=False
-            ),
-            torch.autograd.Variable(
-                torch.tensor(graded_spike, device=device, dtype=dtype),
-                requires_grad=False
-            ),
-        )
+            graded_spike = 1 if graded_spike is True else 0
+            if torch.is_tensor(threshold) is False:
+                threshold = torch.tensor(threshold, device=device, dtype=dtype)
+            ctx.save_for_backward(
+                voltage,
+                torch.autograd.Variable(threshold, requires_grad=False),
+                torch.autograd.Variable(
+                    torch.tensor(tau_rho, device=device, dtype=dtype),
+                    requires_grad=False
+                ),
+                torch.autograd.Variable(
+                    torch.tensor(scale_rho, device=device, dtype=dtype),
+                    requires_grad=False
+                ),
+                torch.autograd.Variable(
+                    torch.tensor(graded_spike, device=device, dtype=dtype),
+                    requires_grad=False
+                ),
+            )
 
         return spikes
 

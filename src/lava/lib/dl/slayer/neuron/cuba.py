@@ -387,7 +387,7 @@ class Neuron(base.Neuron):
 
         return current, voltage
 
-    def spike(self, voltage):
+    def spike(self, voltage, dt):
         """Extracts spike points from the voltage timeseries. It assumes the
         reset dynamics is already applied.
 
@@ -410,7 +410,7 @@ class Neuron(base.Neuron):
             self.graded_spike,
             self.voltage_state,
             # self.s_scale,
-            1,
+            1, dt
         )
 
         if self.persistent_state is True:
@@ -442,4 +442,4 @@ class Neuron(base.Neuron):
         """
         print(dt)
         _, voltage = self.dynamics(input, dt)
-        return self.spike(voltage)
+        return self.spike(voltage, dt)

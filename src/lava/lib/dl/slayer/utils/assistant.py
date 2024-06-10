@@ -120,12 +120,12 @@ class Assistant:
                 # the network returns an additional net_loss term for regularization.
                 output, count = self.net(input, dt)
             else:
-                output, net_loss, count = self.net(input)
+                output, net_loss, count = self.net(input, dt)
         else:
             if self.lam is None:
-                output = self.net(input)
+                output = self.net(input, dt)
             else:
-                output, net_loss = self.net(input)
+                output, net_loss = self.net(input, dt)
 
         # Computes the loss using the specified loss function
         loss = self.error(output, target)
