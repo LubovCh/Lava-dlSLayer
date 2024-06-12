@@ -544,7 +544,6 @@ class AbstractDense(torch.nn.Module):
                 self.synapse.weight.data *= self.mask
 
         z = self.synapse(x)
-        print(dt)
         x = self.neuron(z, dt)
         if self.delay_shift is True:
             x = step_delay(self, x)
