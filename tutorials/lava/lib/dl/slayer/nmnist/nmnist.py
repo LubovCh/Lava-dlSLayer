@@ -159,7 +159,6 @@ class Network(torch.nn.Module):
 
         count = []
         for block in self.blocks:
-            print(dt)
             spike = block(spike, dt)
             count.append(torch.mean(spike).item())
         return spike, torch.FloatTensor(count).reshape(
@@ -228,12 +227,11 @@ if __name__ == '__main__':
         )
 
     epochs = 200
-    dt = 2.0
+    dt = 1.0
 
     for epoch in range(epochs):
         # For each batch in the training data, the Assistant trains the network, computes the output, and logs the event rates (spike counts).
         for i, (input, label) in enumerate(train_loader):  # training loop
-            print(str(i) + " it " + str(dt))
             output, count = assistant.train(input, label, dt)
             header = [
                     'Event rate : ' +

@@ -354,7 +354,6 @@ class Neuron(base.Neuron):
             self.clamp()
 
             # THIS IS I. HERE  UPDATE I
-        print(dt)
         current = leaky_integrator.dynamics(
             input,
             quantize(self.current_decay),
@@ -440,6 +439,5 @@ class Neuron(base.Neuron):
             spike response of the neuron.
 
         """
-        print(dt)
         _, voltage = self.dynamics(input, dt)
         return self.spike(voltage, dt)

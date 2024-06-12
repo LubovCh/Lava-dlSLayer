@@ -92,9 +92,6 @@ def dynamics(input, decay, state, dt, w_scale, threshold=None, debug=False):
     if input.is_cuda is False or debug is True:
         output = _LIDynamics.apply(input, decay, state, dt, threshold, w_scale)
     else:
-        print("wei: " + str(w_scale))
-        print("dt: " + str(dt))
-        print("thr: " + str(threshold))
         module = Accelerated.leaky_integrator
         output = module.dynamics(
             input.contiguous(), decay.contiguous(), state.contiguous(), dt,
