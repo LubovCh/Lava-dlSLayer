@@ -201,9 +201,14 @@ if __name__ == '__main__':
     #Uses the Adam optimizer with a learning rate of 0.001 for training the network.
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 
+    dt = 2.0
+
     #Loads the N-MNIST dataset, applying any necessary augmentations to the training set.
-    training_set = NMNISTDataset(train=True, transform=augment)
-    testing_set = NMNISTDataset(train=False)
+    training_set = NMNISTDataset(train=True, transform=augment, sampling_time=dt)
+    testing_set = NMNISTDataset(train=False, sampling_time=dt)
+
+    # training_set = NMNISTDataset(train=True, transform=augment)
+    # testing_set = NMNISTDataset(train=False)
 
     # Wraps the datasets in DataLoader objects to enable batch processing and shuffling.
     train_loader = DataLoader(
@@ -227,8 +232,7 @@ if __name__ == '__main__':
         )
 
     epochs = 200
-    dt = 1.0
-
+    
     for epoch in range(epochs):
         # For each batch in the training data, the Assistant trains the network, computes the output, and logs the event rates (spike counts).
         for i, (input, label) in enumerate(train_loader):  # training loop
