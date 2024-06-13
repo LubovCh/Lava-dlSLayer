@@ -156,6 +156,7 @@ class _LIDynamics(torch.autograd.Function):
                     raise Exception
 
         ctx.save_for_backward(output, decay)
+        ctx.dt = dt
 
         return output
 
@@ -164,7 +165,7 @@ class _LIDynamics(torch.autograd.Function):
         """ """
         output, decay = ctx.saved_tensors
 
-        grad_input, grad_decay = _li_dynamics_bwd(grad_output, output, decay)
+        grad_input, grad_decay = _li_dynamics_bwd(grad_output, output, decay, ctx.dt)
 
         if _LIDynamics.DEBUG is True and grad_output.is_cuda is True:
             _grad_input, _grad_decay = Accelerated.leaky_integrator.bwd(
@@ -205,7 +206,7 @@ class _LIDynamics(torch.autograd.Function):
                 )
                 raise Exception
 
-        return grad_input, grad_decay, None, None, None
+        return grad_input, grad_decay, None, None, None, None
 
 
 def _li_dynamics_fwd(
@@ -219,8 +220,7 @@ def _li_dynamics_fwd(
     threshold *= w_scale
 
     for n in range(input.shape[-1]):
-        if n % dt != 0:
-            continue
+
         output_new = right_shift_to_zero(output_old * decay_int, 12) + \
             (w_scale * input[..., n]).to(dtype)
         if threshold > 0:
@@ -229,12 +229,13 @@ def _li_dynamics_fwd(
         else:
             output_old = output_new
 
-        output[..., n] = output_new / w_scale
+        if n % dt == 0:
+            output[..., n] = output_new / w_scale
 
     return output
 
 
-def _li_dynamics_bwd(grad_output, output, decay):
+def _li_dynamics_bwd(grad_output, output, decay, dt):
     """ """
     grad_input = torch.zeros_like(grad_output)
     decay = 1 - decay / (1 << 12)
@@ -243,9 +244,11 @@ def _li_dynamics_bwd(grad_output, output, decay):
 
     grad_input[..., num_steps - 1] = grad_output[..., num_steps - 1]
 
-    for n in range(num_steps - 1)[::-1]:
-        grad_input[..., n] = decay * grad_input[..., n + 1] \
-            + grad_output[..., n]
+    for n in range(num_steps - 1, -1, -1):
+        if n % int(dt) == 0:
+            grad_input[..., n] = grad_output[..., n]
+        elif n < num_steps-1:
+            grad_input[..., n] = grad_input[..., n + 1] * decay
 
     grad_decay = grad_input[..., 1:] * output[..., :-1]
 

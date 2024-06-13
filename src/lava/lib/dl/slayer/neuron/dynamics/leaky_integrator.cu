@@ -56,9 +56,6 @@ __global__ void LIDynamicsFwdKernel(
 
     for(int n=0; n<num_steps; ++n) {
 
-        if (n % static_cast<int>(dt) != 0)
-            continue;  // Skip this step if it's not a time step
-
         linear_id = n + neuron_id * num_steps;
 
         output_sign = (output_old >= 0) ? 1 : -1;

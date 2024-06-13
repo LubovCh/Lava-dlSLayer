@@ -158,7 +158,7 @@ class Network(torch.nn.Module):
     def forward(self, spike, dt=1.0):
 
         count = []
-        for block in self.blocks:
+        for i, block in enumerate(self.blocks):
             spike = block(spike, dt)
             count.append(torch.mean(spike).item())
         return spike, torch.FloatTensor(count).reshape(
