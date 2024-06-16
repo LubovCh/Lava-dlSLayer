@@ -66,9 +66,12 @@ __global__ void LIDynamicsFwdKernel(
 
         output_new = output_sign * decayed_output + int(w_scale * input[linear_id]);
         
-        output[linear_id] = 1.0f * output_new / w_scale;
+        if (n % static_cast<int>(dt) == 0) {
+            output[linear_id] = 1.0f * output_new / w_scale;
+        }
         
-        if(threshold >= 0 && output_new >= threshold) { // if threshold <0, then there is no spike and reset dynamics
+        
+        if(threshold >= 0 && output_new >= threshold && n % static_cast<int>(dt) == 0) { // if threshold <0, then there is no spike and reset dynamics
             output_old = 0;
         } else {
             output_old = output_new;
@@ -106,11 +109,13 @@ __global__ void LIDynamicsBwdKernel(
     int linear_id;
 
     for(int n=num_steps-1; n>=0; --n) {
-        if (n % static_cast<int>(dt) != 0)
-            continue;  // Skip this step if it's not a time step
+        
         linear_id = n + neuron_id * num_steps;
         grad_input = decay * grad_input + grad_output[linear_id];
-        grad_input_tensor[linear_id] = grad_input;
+        // grad_input_tensor[linear_id] = grad_input;
+        if (n % static_cast<int>(dt) == 0){
+            grad_input_tensor[linear_id] = grad_input;
+        } 
     }
 }
 
