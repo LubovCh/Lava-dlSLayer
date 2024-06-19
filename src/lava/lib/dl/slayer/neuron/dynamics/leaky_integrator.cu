@@ -70,7 +70,6 @@ __global__ void LIDynamicsFwdKernel(
             output[linear_id] = 1.0f * output_new / w_scale;
         }
         
-        
         if(threshold >= 0 && output_new >= threshold && n % static_cast<int>(dt) == 0) { // if threshold <0, then there is no spike and reset dynamics
             output_old = 0;
         } else {
@@ -108,15 +107,23 @@ __global__ void LIDynamicsBwdKernel(
 
     int linear_id;
 
-    for(int n=num_steps-1; n>=0; --n) {
-        
+    for (int n = num_steps - 1; n >= 0; --n) {
         linear_id = n + neuron_id * num_steps;
-        grad_input = decay * grad_input + grad_output[linear_id];
-        // grad_input_tensor[linear_id] = grad_input;
-        if (n % static_cast<int>(dt) == 0){
+
+        // Update grad_input_tensor at intervals of dt
+        if (n % static_cast<int>(dt) == 0) {
+            if (n == num_steps - 1) {
+                // Initialize grad_input_tensor for the last time step
+                grad_input = grad_output[linear_id];
+            } else {
+                // Compute grad_input using the recurrence relation
+                grad_input = decay * grad_input_tensor[linear_id + 1] + grad_output[linear_id];
+            }
             grad_input_tensor[linear_id] = grad_input;
-        } 
-    }
+        } else if (n != num_steps - 1) { // Avoid accessing out of bounds when n = num_steps - 1
+            grad_input_tensor[linear_id] = grad_input_tensor[linear_id + 1];
+        }
+    }   
 }
 
 variable_list LIDynamicsFwd(

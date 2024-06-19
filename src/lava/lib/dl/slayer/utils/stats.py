@@ -3,8 +3,10 @@
 
 """Module for managing, visualizing, and displaying learning statistics."""
 
+import os
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy
 
 
 class LearningStat:
@@ -47,6 +49,7 @@ class LearningStat:
         self.loss_unit = ''
         self.accuracy_str = 'accuracy'
         self.accuracy_unit = ''
+        self.accuracy_dict = {}
 
     def reset(self):
         """Reset stat."""
@@ -173,14 +176,14 @@ class LearningStats:
     def __str__(self):
         """String summary of stats.
         """
-        val_str = str(self.validation)
-        if len(val_str) > 0:
-            val_str = ' | Valid ' + val_str
+        # val_str = str(self.validation)
+        # if len(val_str) > 0:
+        #     val_str = ' | Valid ' + val_str
 
-        test_str = str(self.testing)
-        if len(test_str) > 0:
-            test_str = ' | Test  ' + test_str
-        return f'Train {str(self.training)}{val_str}{test_str}'
+        # test_str = str(self.testing)
+        # if len(test_str) > 0:
+        #     test_str = ' | Test  ' + test_str
+        return f'Train {str(self.training)}'
 
     def print(
         self, epoch,
@@ -279,14 +282,12 @@ class LearningStats:
         if path is not None:
             plt.savefig(path + 'loss.png')
 
-        if self.training.valid_accuracy_log is False and \
-            self.validation.valid_accuracy_log is False and \
-                self.testing.valid_accuracy_log is False:
+        if self.training.valid_accuracy_log is False:
             return
         acc_plot_exists = False
         if self.training.valid_accuracy_log:
             acc_plot_exists = figure_init(figures[1])
-            plt.plot(self.training.accuracy_log, label='Training')
+            plt.plot(list(self.training.accuracy_dict.values()), label='Training')
         if self.validation.valid_accuracy_log:
             if acc_plot_exists is False:
                 acc_plot_exists = figure_init(figures[1])
@@ -304,7 +305,7 @@ class LearningStats:
         if path is not None:
             plt.savefig(path + 'accuracy.png')
 
-    def save(self, path=''):
+    def save(self, dt, path=''):
         """Saves learning stats to file
 
         Parameters
@@ -338,27 +339,25 @@ class LearningStats:
             self.validation.valid_accuracy_log is False and \
                 self.testing.valid_accuracy_log is False:
             return
-        with open(path + self.testing.accuracy_str + '.txt', 'wt') as accuracy:
-            header = ''
-            if self.training.valid_loss_log:
-                header += ' Train       '
-            if self.validation.valid_loss_log:
-                header += ' Valid       '
-            if self.testing.valid_loss_log:
-                header += ' Test        '
+
+        if not os.path.exists(path):
+            os.makedirs(path)
+        with open(path + 'accuracy' + '.txt', 'wt') as accuracy:
+            header = ' Epoch       Iteration        Accuracy'
 
             accuracy.write(f'#{header}\r\n')
 
-            for tr, va, te in zip(
-                self.training.accuracy_log,
-                self.validation.accuracy_log,
-                self.testing.accuracy_log
-            ):
-                entry = '' if tr is None else f'{tr:12.6f} '
-                entry += '' if va is None else f'{va:12.6f} '
-                entry += '' if te is None else f'{te:12.6f} '
-                accuracy.write(f'{entry}\r\n')
+            for entry in  self.training.accuracy_dict.items():
+                accuracy.write(f'{entry[0]}      {entry[0]}       {entry[1]:12.6f}\r\n')
 
+        convergence_rate = scipy.trapz(list(self.training.accuracy_dict.values()), dx=1)
+
+        with open(path + 'convergence_rate.txt', 'a') as conv:
+            conv.write(f'{dt} : ' + f'{convergence_rate:12.6f}\r\n')
+
+    def record(self, epoch):
+        self.training.accuracy_dict[epoch] = self.training.accuracy
+    
     def load(self, path=''):
         """
         """

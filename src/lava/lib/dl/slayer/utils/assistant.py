@@ -6,6 +6,8 @@ description."""
 
 import torch
 
+from lava.lib.dl.slayer.utils.stats import LearningStats
+
 
 class Assistant:
     """Assistant that bundles training, validation and testing workflow.
@@ -60,7 +62,7 @@ class Assistant:
         self.error = error
         self.optimizer = optimizer
         self.classifier = classifier
-        self.stats = stats
+        self.stats: LearningStats = stats
         self.count_log = count_log
         self.lam = lam
         self.device = None

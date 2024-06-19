@@ -44,12 +44,12 @@ class SpikeTime(torch.nn.Module):
             self.filter.filter.data = new_fir
         self.reduction = reduction
 
-    def forward(self, input, desired):
+    def forward(self, input, label):
         """Forward computation of loss.
         """
         return F.mse_loss(
             self.filter(input).flatten(),
-            self.filter(desired).flatten(),
+            self.filter(label).flatten(),
             reduction=self.reduction
         )
 

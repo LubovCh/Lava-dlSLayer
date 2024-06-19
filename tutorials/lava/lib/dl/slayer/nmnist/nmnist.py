@@ -102,7 +102,7 @@ class NMNISTDataset(Dataset):
                 f'to {data_path}/'
 
         self.samples = glob.glob(f'{data_path}/*/*.bin')
-        self.sampling_time = sampling_time
+        self.sampling_ti                me = sampling_time
         self.num_time_bins = int(sample_length/sampling_time)
         self.transform = transform
 
@@ -195,69 +195,73 @@ if __name__ == '__main__':
     # device = torch.device('cpu')
     device = torch.device('cuda')
 
-    # Instantiates the SNN (defined in a Network class elsewhere) and moves it to the selected device.
-    net = Network().to(device)
+    for dt in [1.0, 2.0, 4.0, 6.0, 8.0, 10.0]:
+        for j in range(3):
+            print(f'Running dt={dt} iteration={i}')
+        # Instantiates the SNN (defined in a Network class elsewhere) and moves it to the selected device.
+            net = Network().to(device)
 
-    #Uses the Adam optimizer with a learning rate of 0.001 for training the network.
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
+            #Uses the Adam optimizer with a learning rate of 0.001 for training the network.
+            optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
 
-    dt = 2.0
+            #Loads the N-MNIST dataset, applying any necessary augmentations to the training set.
+            training_set = NMNISTDataset(train=True, transform=augment, sampling_time=dt)
+            testing_set = NMNISTDataset(train=False, sampling_time=dt)
 
-    #Loads the N-MNIST dataset, applying any necessary augmentations to the training set.
-    training_set = NMNISTDataset(train=True, transform=augment, sampling_time=dt)
-    testing_set = NMNISTDataset(train=False, sampling_time=dt)
+            # training_set = NMNISTDataset(train=True, transform=augment)
+            # testing_set = NMNISTDataset(train=False)
 
-    # training_set = NMNISTDataset(train=True, transform=augment)
-    # testing_set = NMNISTDataset(train=False)
+            # Wraps the datasets in DataLoader objects to enable batch processing and shuffling.
+            train_loader = DataLoader(
+                    dataset=training_set, batch_size=32, shuffle=True
+                )
+            test_loader = DataLoader(dataset=testing_set, batch_size=32, shuffle=True)
 
-    # Wraps the datasets in DataLoader objects to enable batch processing and shuffling.
-    train_loader = DataLoader(
-            dataset=training_set, batch_size=32, shuffle=True
-        )
-    test_loader = DataLoader(dataset=testing_set, batch_size=32, shuffle=True)
+            # Defines the loss function using SpikeRate from SLAYER
+            error = slayer.loss.SpikeRate(
+                    true_rate=0.2, false_rate=0.03, reduction='sum'
+                ).to(device)
+            # error = slayer.loss.SpikeMax(mode='logsoftmax').to(device)
 
-    # Defines the loss function using SpikeRate from SLAYER
-    error = slayer.loss.SpikeRate(
-            true_rate=0.2, false_rate=0.03, reduction='sum'
-        ).to(device)
-    # error = slayer.loss.SpikeMax(mode='logsoftmax').to(device)
+            # keep track of training statistics.
+            stats = slayer.utils.LearningStats()
 
-    # keep track of training statistics.
-    stats = slayer.utils.LearningStats()
+            # Creates an Assistant which handles training, testing, and logging.
+            assistant = slayer.utils.Assistant(
+                    net, error, optimizer, stats,
+                    classifier=slayer.classifier.Rate.predict, count_log=True
+                )
 
-    # Creates an Assistant which handles training, testing, and logging.
-    assistant = slayer.utils.Assistant(
-            net, error, optimizer, stats,
-            classifier=slayer.classifier.Rate.predict, count_log=True
-        )
+            epochs = 30
+            
+            for epoch in range(epochs):
+                # For each batch in the training data, the Assistant trains the network, computes the output, and logs the event rates (spike counts).
+                for i, (input, label) in enumerate(train_loader):  # training loop
+                    output, count = assistant.train(input, label, dt)
+                    header = [
+                            'Event rate : ' +
+                            ', '.join([f'{c.item():.4f}' for c in count.flatten()])
+                        ]
+                    
+                stats.record(epoch)
+                stats.print(epoch, iter=i, header=header, dataloader=train_loader)
 
-    epochs = 200
-    
-    for epoch in range(epochs):
-        # For each batch in the training data, the Assistant trains the network, computes the output, and logs the event rates (spike counts).
-        for i, (input, label) in enumerate(train_loader):  # training loop
-            output, count = assistant.train(input, label, dt)
-            header = [
-                    'Event rate : ' +
-                    ', '.join([f'{c.item():.4f}' for c in count.flatten()])
-                ]
-            stats.print(epoch, iter=i, header=header, dataloader=train_loader)
+                # Similar to the training loop but used for testing the network on the test dataset.
+                for i, (input, label) in enumerate(test_loader):  # training loop
+                    output, count = assistant.test(input, label)
+                    header = [
+                            'Event rate : ' +
+                            ', '.join([f'{c.item():.4f}' for c in count.flatten()])
+                        ]
+                stats.print(epoch, iter=i, header=header, dataloader=test_loader)
 
-        # Similar to the training loop but used for testing the network on the test dataset.
-        for i, (input, label) in enumerate(test_loader):  # training loop
-            output, count = assistant.test(input, label)
-            header = [
-                    'Event rate : ' +
-                    ', '.join([f'{c.item():.4f}' for c in count.flatten()])
-                ]
-            stats.print(epoch, iter=i, header=header, dataloader=test_loader)
-
-        # Saves the model if the current testing accuracy is the best seen so far.
-        # Updates, saves, and plots training statistics.
-        # Logs the gradient flow, useful for diagnosing issues with training.
-        if stats.testing.best_accuracy:
-            torch.save(net.state_dict(), trained_folder + '/network.pt')
-        stats.update()
-        stats.save(trained_folder + '/')
-        stats.plot(path=trained_folder + '/')
-        net.grad_flow(trained_folder + '/')
+                # Saves the model if the current testing accuracy is the best seen so far.
+                # Updates, saves, and plots training statistics.
+                # Logs the gradient flow, useful for diagnosing issues with training.
+                if stats.testing.best_accuracy:
+                    torch.save(net.state_dict(), trained_folder + '/network.pt')
+                stats.update()
+            path = trained_folder + f'/dt={dt}/' + f'run={i+1}/'
+            stats.save(dt=dt, path=path)
+            stats.plot(path=path)
+            net.grad_flow(path = path)
