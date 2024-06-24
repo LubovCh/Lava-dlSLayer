@@ -102,7 +102,7 @@ class NMNISTDataset(Dataset):
                 f'to {data_path}/'
 
         self.samples = glob.glob(f'{data_path}/*/*.bin')
-        self.sampling_ti                me = sampling_time
+        self.sampling_time = sampling_time
         self.num_time_bins = int(sample_length/sampling_time)
         self.transform = transform
 
@@ -195,9 +195,9 @@ if __name__ == '__main__':
     # device = torch.device('cpu')
     device = torch.device('cuda')
 
-    for dt in [1.0, 2.0, 4.0, 6.0, 8.0, 10.0]:
+    for dt in [10.0]:
         for j in range(3):
-            print(f'Running dt={dt} iteration={i}')
+            print(f'Running dt={dt} iteration={j}')
         # Instantiates the SNN (defined in a Network class elsewhere) and moves it to the selected device.
             net = Network().to(device)
 
@@ -261,7 +261,7 @@ if __name__ == '__main__':
                 if stats.testing.best_accuracy:
                     torch.save(net.state_dict(), trained_folder + '/network.pt')
                 stats.update()
-            path = trained_folder + f'/dt={dt}/' + f'run={i+1}/'
+            path = trained_folder + f'/dt={dt}/' + f'run={j+1}/'
             stats.save(dt=dt, path=path)
             stats.plot(path=path)
             net.grad_flow(path = path)

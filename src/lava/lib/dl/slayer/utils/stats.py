@@ -314,30 +314,28 @@ class LearningStats:
             Folder path to save the stats. Defaults to ''.
 
         """
-        with open(path + self.training.loss_str + '.txt', 'wt') as loss:
-            header = ''
-            if self.training.valid_loss_log:
-                header += ' Train       '
-            if self.validation.valid_loss_log:
-                header += ' Valid       '
-            if self.testing.valid_loss_log:
-                header += ' Test        '
+        # # with open(path + self.training.loss_str + '.txt', 'wt') as loss:
+        #     header = ''
+        #     if self.training.valid_loss_log:
+        #         header += ' Train       '
+        #     if self.validation.valid_loss_log:
+        #         header += ' Valid       '
+        #     if self.testing.valid_loss_log:
+        #         header += ' Test        '
 
-            loss.write(f'#{header}\r\n')
+        #     loss.write(f'#{header}\r\n')
 
-            for tr, va, te in zip(
-                self.training.loss_log,
-                self.validation.loss_log,
-                self.testing.loss_log
-            ):
-                entry = '' if tr is None else f'{tr:12.6f} '
-                entry += '' if va is None else f'{va:12.6f} '
-                entry += '' if te is None else f'{te:12.6f} '
-                loss.write(f'{entry}\r\n')
+        #     for tr, va, te in zip(
+        #         self.training.loss_log,
+        #         self.validation.loss_log,
+        #         self.testing.loss_log
+        #     ):
+        #         entry = '' if tr is None else f'{tr:12.6f} '
+        #         entry += '' if va is None else f'{va:12.6f} '
+        #         entry += '' if te is None else f'{te:12.6f} '
+        #         loss.write(f'{entry}\r\n')
 
-        if self.training.valid_accuracy_log is False and \
-            self.validation.valid_accuracy_log is False and \
-                self.testing.valid_accuracy_log is False:
+        if self.training.valid_accuracy_log is False:
             return
 
         if not os.path.exists(path):

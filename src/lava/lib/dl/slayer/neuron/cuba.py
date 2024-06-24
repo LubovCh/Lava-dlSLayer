@@ -132,7 +132,7 @@ class Neuron(base.Neuron):
         # but Loihi spikes if voltage > vth
         # so threshold_eps is added to get the same effect in hardware.
         self.threshold_eps = 0.01 / self.s_scale
-
+        self.dynamic_class = leaky_integrator.Dynamics()
         if self.shared_param is True:
             if np.isscalar(current_decay) is False:
                 raise AssertionError(
@@ -354,7 +354,7 @@ class Neuron(base.Neuron):
             self.clamp()
 
             # THIS IS I. HERE  UPDATE I
-        current = leaky_integrator.dynamics(
+        current = self.dynamic_class.dynamics(
             input,
             quantize(self.current_decay),
             self.current_state.contiguous(),
@@ -366,7 +366,7 @@ class Neuron(base.Neuron):
         if self.norm is not None:
             current = self.norm(current)
 
-        voltage = leaky_integrator.dynamics(
+        voltage = self.dynamic_class.dynamics(
             current,  # bias can be enabled by adding it here
             quantize(self.voltage_decay),
             self.voltage_state.contiguous(),

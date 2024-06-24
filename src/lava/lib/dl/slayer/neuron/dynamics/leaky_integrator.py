@@ -47,58 +47,62 @@ class Accelerated:
         return Accelerated.module
 
 
-def dynamics(input, decay, state, dt, w_scale, threshold=None, debug=False):
-    """Leaky integrator dynamics. It automatically switches
-    between CUDA and CPU implementation depending on available hardware.
+class Dynamics:
+    def __init__(self) -> None:
+        self.module = Accelerated.leaky_integrator
 
-    .. math::
-        y[t] &= (1 - \\alpha)\\,y[t-1] + x[t] \\
+    def dynamics(self, input, decay, state, dt, w_scale, threshold=None, debug=False):
+        """Leaky integrator dynamics. It automatically switches
+        between CUDA and CPU implementation depending on available hardware.
 
-        s[t] &= y[t] \\geq \\vartheta \\
+        .. math::
+            y[t] &= (1 - \\alpha)\\,y[t-1] + x[t] \\
 
-        y[t] &= y[t]\\,(1-s[t])
+            s[t] &= y[t] \\geq \\vartheta \\
 
-    Parameters
-    ----------
-    input : torch tensor
-        input tensor.
-    decay : torch tensor
-        decay tensor. Note: it is unscaled integer value here.
-    state : torch tensor
-        dynamics state.
-    w_scale : int
-        parameter scaling for integer calculations.
-    threshold : float or None, optional
-        threshold for spiking dynamics. Default is None.
-    debug : bool, optional
-        enable/disable debug mode. Default is False.
+            y[t] &= y[t]\\,(1-s[t])
 
-    Returns
-    -------
-    torch tensor
-        leaky integrator output.
+        Parameters
+        ----------
+        input : torch tensor
+            input tensor.
+        decay : torch tensor
+            decay tensor. Note: it is unscaled integer value here.
+        state : torch tensor
+            dynamics state.
+        w_scale : int
+            parameter scaling for integer calculations.
+        threshold : float or None, optional
+            threshold for spiking dynamics. Default is None.
+        debug : bool, optional
+            enable/disable debug mode. Default is False.
 
-    Note
-    ----
-    When threshold is not supplied, no spike is generated.
-    """
-    if threshold is None:
-        threshold = -1  # -1 means no reset mechanism
-    _LIDynamics.DEBUG = debug
+        Returns
+        -------
+        torch tensor
+            leaky integrator output.
 
-    if torch.numel(state) == 1:
-        state = state * torch.ones(input.shape[:-1]).to(input.device)
+        Note
+        ----
+        When threshold is not supplied, no spike is generated.
+        """
+        if threshold is None:
+            threshold = -1  # -1 means no reset mechanism
+        _LIDynamics.DEBUG = debug
 
-    if input.is_cuda is False or debug is True:
-        output = _LIDynamics.apply(input, decay, state, dt, threshold, w_scale)
-    else:
-        module = Accelerated.leaky_integrator
-        output = module.dynamics(
-            input.contiguous(), decay.contiguous(), state.contiguous(), dt,
-            threshold, w_scale
-        )
+        if torch.numel(state) == 1:
+            state = state * torch.ones(input.shape[:-1]).to(input.device)
 
-    return output
+        if input.is_cuda is False or debug is True:
+            output = _LIDynamics.apply(input, decay, state, dt, threshold, w_scale)
+        else:
+            # module = Accelerated.leaky_integrator
+            output = self.module.dynamics(
+                input.contiguous(), decay.contiguous(), state.contiguous(), dt,
+                threshold, w_scale
+            )
+
+        return output
 
 
 def persistent_state(state, spike):
